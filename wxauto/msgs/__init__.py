@@ -36,6 +36,10 @@ from .friend import (
     FriendFileMessage,
     FriendOtherMessage,
 )
+from .miniprogram import (
+    MiniprogramMessage,
+    MiniprogramInfo,
+)
 
 __all__ = [
     'parse_msg',
@@ -66,4 +70,6 @@ __all__ = [
     'FriendVideoMessage',
     'FriendFileMessage',
     'FriendOtherMessage',
+    'MiniprogramMessage',
+    'MiniprogramInfo',
 ]
