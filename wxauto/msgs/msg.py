@@ -2,9 +2,11 @@ from .attr import *
 from .type import OtherMessage
 from . import self as selfmsg
 from . import friend as friendmsg
+from .miniprogram import MiniprogramCardAnalyzer
 from wxauto.languages import *
 from wxauto.param import WxParam
 from wxauto import uiautomation as uia
+from wxauto.logger import wxlog
 from typing import Literal
 import re
 
@@ -36,6 +38,22 @@ SEPICIAL_MSGS = [
         '[文件]',     # FileMessage
     ]
 ]
+
+def _is_miniprogram_message(control: uia.Control) -> bool:
+    """判断是否为小程序消息
+    
+    Args:
+        control: UI控件
+        
+    Returns:
+        bool: 是否为小程序消息
+    """
+    try:
+        analyzer = MiniprogramCardAnalyzer(control)
+        return analyzer.is_miniprogram_card()
+    except Exception as e:
+        wxlog.debug(f"小程序消息识别异常: {str(e)}")
+        return False
 
 def parse_msg_attr(
         control: uia.Control, 
@@ -83,6 +101,10 @@ def parse_msg_type(
         msgtype = friendmsg
     else:
         msgtype = selfmsg
+    
+    # MiniprogramMessage - Check first as it has priority
+    if _is_miniprogram_message(control):
+        return getattr(msgtype, f'{attr}MiniprogramMessage')(control, parent)
     
     # Special Message Type
     if content in SEPICIAL_MSGS:

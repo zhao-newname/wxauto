@@ -1,5 +1,6 @@
 from .type import *
 from .attr import FriendMessage
+from .miniprogram import MiniprogramMessage
 import sys
 
 class FriendTextMessage(FriendMessage, TextMessage):
@@ -51,6 +52,14 @@ class FriendVoiceMessage(FriendMessage, VoiceMessage):
             control: uia.Control, 
             parent: "ChatBox",
 
+        ):
+        super().__init__(control, parent)
+
+class FriendMiniprogramMessage(FriendMessage, MiniprogramMessage):
+    def __init__(
+            self, 
+            control: uia.Control, 
+            parent: "ChatBox",
         ):
         super().__init__(control, parent)
 

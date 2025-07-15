@@ -1,5 +1,6 @@
 from .type import *
 from .attr import SelfMessage
+from .miniprogram import MiniprogramMessage
 import sys
 
 class SelfTextMessage(SelfMessage, TextMessage):
@@ -43,6 +44,14 @@ class SelfVideoMessage(SelfMessage, VideoMessage):
         super().__init__(control, parent)
 
 class SelfVoiceMessage(SelfMessage, VoiceMessage):
+    def __init__(
+            self, 
+            control: uia.Control, 
+            parent: "ChatBox"
+        ):
+        super().__init__(control, parent)
+
+class SelfMiniprogramMessage(SelfMessage, MiniprogramMessage):
     def __init__(
             self, 
             control: uia.Control, 
