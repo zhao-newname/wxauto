@@ -1,0 +1,202 @@
+# 实现计划
+
+- [ ] 1. 创建小程序消息基础架构
+  - 创建小程序消息类型的基础类和接口定义
+  - 实现小程序消息的基本属性和方法结构
+  - 建立小程序信息数据模型类
+  - _需求: 1.1, 2.1_
+  - **验收标准**：
+    - MiniprogramMessage基类已创建，继承自HumanMessage
+    - MiniprogramInfo数据模型类已实现，包含所有必要字段
+    - 基础属性和方法框架已定义（app_name, app_description等）
+    - 代码能够成功导入且无语法错误
+  - **验证方法**：
+    - 执行 `python -c "from wxauto.msgs.miniprogram import MiniprogramMessage, MiniprogramInfo; print('导入成功')"` 
+    - 检查类继承关系：`print(MiniprogramMessage.__mro__)`
+    - 验证数据模型字段：`print(MiniprogramInfo.__annotations__)`
+    - 运行基础功能测试脚本验证方法可调用
+
+- [ ] 2. 实现小程序卡片UI识别机制
+  - 创建小程序卡片UI分析器类
+  - 实现小程序卡片的识别逻辑，区分小程序消息和其他消息类型
+  - 编写UI控件层级分析方法，识别小程序卡片的特征控件
+  - 添加对不同样式小程序卡片的识别支持
+  - _需求: 1.1, 1.2, 1.3_
+  - **验收标准**：
+    - MiniprogramCardAnalyzer类已创建并实现is_miniprogram_card方法
+    - 能够正确识别至少3种不同样式的小程序卡片
+    - 对非小程序消息返回False，准确率达到95%以上
+    - UI控件层级分析方法能够找到小程序卡片的关键子控件
+  - **验证方法**：
+    - 创建测试脚本，准备20个小程序卡片和20个非小程序消息样本
+    - 运行识别测试：`python test_miniprogram_recognition.py`
+    - 验证准确率：正确识别数/总数 >= 95%
+    - 手动检查：在微信中测试3种不同类型小程序（游戏、工具、电商）的识别
+
+- [ ] 3. 扩展消息解析器支持小程序消息
+  - 修改wxauto/msgs/msg.py中的parse_msg_type函数，添加小程序消息识别分支
+  - 更新SEPICIAL_MSGS列表，包含小程序相关的特殊消息标识
+  - 实现小程序消息的控件长度和高度特征识别
+  - _需求: 1.1, 1.2_
+  - **验收标准**：
+    - parse_msg_type函数已更新，包含小程序消息识别逻辑
+    - SEPICIAL_MSGS列表已添加小程序相关标识
+    - 小程序消息能够被正确解析为MiniprogramMessage实例
+    - 现有消息类型解析功能不受影响
+  - **验证方法**：
+    - 代码审查：检查parse_msg_type函数是否包含小程序分支
+    - 单元测试：`python -c "from wxauto.msgs.msg import SEPICIAL_MSGS; print('[小程序]' in SEPICIAL_MSGS)"`
+    - 集成测试：创建模拟UI控件，验证返回MiniprogramMessage实例
+    - 回归测试：运行现有消息解析测试，确保无破坏性变更
+
+- [ ] 4. 实现小程序基本信息提取功能
+  - 创建小程序名称提取方法，从UI控件中获取小程序标题
+  - 实现小程序描述信息的提取逻辑
+  - 添加缩略图信息获取功能
+  - 实现信息提取失败时的错误处理和默认值返回
+  - _需求: 2.1, 2.2, 2.3, 2.4_
+  - **验收标准**：
+    - app_name属性能够正确提取小程序名称，成功率90%以上
+    - app_description属性能够提取描述信息（如果存在）
+    - 缩略图信息能够被识别和获取
+    - 提取失败时返回合理的默认值，不抛出异常
+  - **验证方法**：
+    - 准备10个不同小程序卡片样本进行信息提取测试
+    - 统计测试：`python test_info_extraction.py` 验证成功率 >= 90%
+    - 异常测试：故意传入损坏的UI控件，验证不抛出异常
+    - 手动验证：检查提取的app_name和app_description是否与实际显示一致
+
+- [ ] 5. 开发小程序技术参数提取功能
+  - 实现小程序AppID的提取方法，通过UI控件属性或右键菜单获取
+  - 创建页面路径参数的解析功能
+  - 添加额外参数的提取和解析逻辑
+  - 实现技术参数不可获取时的状态标识
+  - _需求: 3.1, 3.2, 3.3, 3.4_
+  - **验收标准**：
+    - app_id属性能够提取小程序AppID（当可获取时）
+    - page_path属性能够解析页面路径参数
+    - 额外参数能够被提取并存储在page_params字典中
+    - 不可获取的参数返回None，并有明确的状态标识
+  - **验证方法**：
+    - 技术参数测试：`python test_technical_params.py` 验证AppID和页面路径提取
+    - 右键菜单测试：手动验证右键复制功能获取技术参数
+    - 边界测试：测试无技术参数的小程序卡片，验证返回None
+    - 参数解析测试：验证page_params字典正确存储额外参数
+
+- [ ] 6. 创建好友和自己的小程序消息类
+  - 在wxauto/msgs/friend.py中添加FriendMiniprogramMessage类
+  - 在wxauto/msgs/self.py中添加SelfMiniprogramMessage类
+  - 实现两种消息类型的特定属性和方法
+  - 确保消息类继承正确的基类和混入类
+  - _需求: 1.1, 2.1, 3.1_
+  - **验收标准**：
+    - FriendMiniprogramMessage类已创建，正确继承FriendMessage和MiniprogramMessage
+    - SelfMiniprogramMessage类已创建，正确继承SelfMessage和MiniprogramMessage
+    - 两个类都能正确初始化并访问所有父类方法
+    - 消息属性（sender, sender_remark等）设置正确
+  - **验证方法**：
+    - 导入测试：`python -c "from wxauto.msgs.friend import FriendMiniprogramMessage; from wxauto.msgs.self import SelfMiniprogramMessage; print('导入成功')"`
+    - 继承测试：验证MRO包含所有必要的父类
+    - 实例化测试：创建模拟控件，测试两个类能正确初始化
+    - 属性测试：验证sender和sender_remark属性设置符合预期
+
+- [ ] 7. 实现小程序消息交互功能
+  - 添加小程序卡片点击功能，触发小程序打开
+  - 实现右键菜单操作支持，包括复制链接信息
+  - 创建小程序消息转发功能
+  - 添加交互操作失败时的错误处理和状态返回
+  - _需求: 5.1, 5.2, 5.3, 5.4_
+  - **验收标准**：
+    - open_miniprogram方法能够成功点击并打开小程序
+    - copy_link_info方法能够复制小程序信息到剪贴板
+    - 转发功能能够正常工作（继承自父类）
+    - 所有交互操作失败时返回WxResponse.failure()并包含错误信息
+  - **验证方法**：
+    - 手动交互测试：在微信中点击小程序卡片，验证能正常打开
+    - 剪贴板测试：`python test_clipboard_copy.py` 验证复制功能
+    - 转发测试：手动测试转发功能是否正常工作
+    - 错误处理测试：模拟失败场景，验证返回WxResponse.failure()
+
+- [ ] 8. 开发批量处理和过滤功能
+  - 创建MiniprogramExtractor类，实现批量小程序消息提取
+  - 实现聊天记录中小程序消息的过滤功能
+  - 添加按小程序名称、时间等条件的过滤方法
+  - 确保批量处理时的性能优化和错误处理
+  - _需求: 4.1, 4.2, 4.3, 4.4_
+  - **验收标准**：
+    - MiniprogramExtractor类已创建并实现extract_all_miniprogram_messages方法
+    - 能够从聊天记录中正确过滤出所有小程序消息
+    - filter_by_app_name等过滤方法工作正常
+    - 处理1000条消息的性能在可接受范围内（<5秒）
+  - **验证方法**：
+    - 功能测试：`python test_batch_processing.py` 验证批量提取功能
+    - 过滤测试：验证filter_by_app_name等方法返回正确结果
+    - 性能测试：使用time模块测量处理1000条消息的时间 < 5秒
+    - 准确性测试：手动验证提取的小程序消息数量和类型正确
+
+- [ ] 9. 添加数据导出和序列化功能
+  - 实现小程序信息的JSON序列化方法
+  - 创建批量数据导出功能，支持导出为文件
+  - 添加数据格式化和美化输出功能
+  - 实现导出过程中的错误处理
+  - _需求: 4.2, 4.4_
+  - **验收标准**：
+    - MiniprogramInfo.to_json()方法能够正确序列化为JSON字符串
+    - export_to_json方法能够将批量数据导出为格式化的JSON文件
+    - 导出的JSON文件格式正确且可读性良好
+    - 导出失败时返回明确的错误信息
+  - **验证方法**：
+    - JSON序列化测试：`python test_json_serialization.py` 验证序列化功能
+    - 文件导出测试：验证导出的JSON文件存在且格式正确
+    - JSON格式验证：使用`json.loads()`验证导出文件可正确解析
+    - 错误处理测试：模拟磁盘空间不足等场景，验证错误处理
+
+- [ ] 10. 编写单元测试和集成测试
+  - 创建小程序消息识别的单元测试用例
+  - 编写信息提取功能的测试代码
+  - 实现交互功能的集成测试
+  - 添加批量处理功能的性能和准确性测试
+  - _需求: 1.1, 2.1, 3.1, 4.1, 5.1_
+  - **验收标准**：
+    - 至少10个单元测试用例，覆盖主要功能模块
+    - 所有测试用例能够通过执行
+    - 测试覆盖率达到80%以上
+    - 包含边界条件和异常情况的测试用例
+  - **验证方法**：
+    - 测试执行：`python -m pytest tests/test_miniprogram.py -v` 验证所有测试通过
+    - 覆盖率检查：`python -m pytest --cov=wxauto.msgs.miniprogram --cov-report=html` 验证覆盖率 >= 80%
+    - 测试数量验证：`python -c "import tests.test_miniprogram; print(len([x for x in dir(tests.test_miniprogram) if x.startswith('test_')]))"`
+    - 边界测试验证：检查测试文件包含异常处理和边界条件测试用例
+
+- [ ] 11. 更新语言支持和错误消息
+  - 在wxauto/languages.py中添加小程序相关的多语言支持
+  - 创建小程序功能的错误消息定义
+  - 实现本地化的用户提示信息
+  - _需求: 2.4, 3.4, 5.4_
+  - **验收标准**：
+    - languages.py已添加小程序相关的中英文对照
+    - 错误消息已本地化，支持中英文显示
+    - 所有用户可见的提示信息都有多语言支持
+    - 语言切换功能正常工作
+  - **验证方法**：
+    - 语言文件检查：`python -c "from wxauto.languages import MINIPROGRAM_MESSAGES; print(len(MINIPROGRAM_MESSAGES))"`
+    - 多语言测试：切换WxParam.LANGUAGE，验证消息显示语言正确
+    - 错误消息测试：触发各种错误场景，验证错误消息本地化
+    - 完整性检查：确保所有用户可见字符串都有对应的翻译
+
+- [ ] 12. 集成功能到主要接口
+  - 更新Chat和WeChat类，添加小程序消息相关的便捷方法
+  - 实现GetMiniprogramMessages等高级接口方法
+  - 添加小程序消息统计和分析功能
+  - 确保新功能与现有API的兼容性
+  - _需求: 4.1, 4.2, 4.3_
+  - **验收标准**：
+    - Chat类已添加GetMiniprogramMessages方法
+    - WeChat类已添加小程序消息相关的便捷方法
+    - 新方法能够正确返回小程序消息列表
+    - 现有API功能不受影响，向后兼容性良好
+  - **验证方法**：
+    - API测试：`python test_api_integration.py` 验证新方法正常工作
+    - 兼容性测试：运行现有的wxauto测试套件，确保无破坏性变更
+    - 功能测试：手动调用GetMiniprogramMessages方法，验证返回正确的小程序消息列表
+    - 文档验证：检查新方法的文档字符串和类型注解是否完整

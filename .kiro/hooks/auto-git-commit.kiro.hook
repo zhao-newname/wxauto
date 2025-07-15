@@ -1,0 +1,16 @@
+{
+  "enabled": true,
+  "name": "Auto Git Commit on Upload",
+  "description": "Automatically performs a git commit when the user mentions uploading files or changes",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/*"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "The user has mentioned uploading. Please automatically run 'git add .' followed by 'git commit -m \"Auto commit: user upload\"' to commit all current changes to the git repository."
+  }
+}

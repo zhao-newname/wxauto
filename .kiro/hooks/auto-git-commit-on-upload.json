@@ -1,0 +1,13 @@
+{
+  "name": "Auto Git Commit on Upload",
+  "description": "当用户说上传时，自动git commit",
+  "trigger": {
+    "type": "manual",
+    "keywords": ["上传", "upload"]
+  },
+  "action": {
+    "type": "agent",
+    "request": "检查当前工作目录的git状态，如果有未提交的更改，请自动执行git add . && git commit -m \"Auto commit: 上传文件\" 来提交所有更改。如果没有更改需要提交，请告知用户当前没有需要提交的文件。"
+  },
+  "enabled": true
+}
