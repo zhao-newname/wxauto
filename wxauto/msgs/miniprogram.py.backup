@@ -527,47 +527,21 @@ class MiniprogramCardAnalyzer:
         """
         try:
             if not self.is_miniprogram_card():
-                wxlog.debug("非小程序卡片，返回空名称")
                 return ""
-            
-            # 策略1: 从关键子控件中提取
-            key_controls = self.find_key_child_controls()
-            if key_controls.get('app_name') and key_controls['app_name'].Name:
-                name = key_controls['app_name'].Name.strip()
-                # 清理名称（移除常见后缀和前缀）
-                name = self._clean_app_name(name)
-                if name:
-                    wxlog.debug(f"从关键控件提取到应用名称: {name}")
-                    return name
-            
-            # 策略2: 从主控件名称中解析
-            if self.control.Name:
-                name = self.control.Name.strip()
-                # 尝试从复合名称中提取应用名称
-                extracted_name = self._extract_name_from_composite_text(name)
-                if extracted_name:
-                    wxlog.debug(f"从主控件名称提取到应用名称: {extracted_name}")
-                    return extracted_name
-            
-            # 策略3: 从所有文本控件中查找最可能的应用名称
-            text_controls = self._find_text_controls()
-            for ctrl in text_controls:
-                if ctrl.Name:
-                    name = ctrl.Name.strip()
-                    # 检查是否符合应用名称特征
-                    if self._is_likely_app_name(name):
-                        cleaned_name = self._clean_app_name(name)
-                        if cleaned_name:
-                            wxlog.debug(f"从文本控件提取到应用名称: {cleaned_name}")
-                            return cleaned_name
-            
-            # 策略4: 使用默认值
-            wxlog.debug("无法提取应用名称，返回默认值")
-            return "未知小程序"
                 
+            # 从控件名称中提取应用名称
+            if self.control.Name:
+                # 小程序名称通常在控件名称的开头
+                name = self.control.Name.strip()
+                # 移除常见的后缀
+                name = re.sub(r'\s*(小程序|miniprogram|weapp).*$', '', name, flags=re.IGNORECASE)
+                return name.strip()
+                
+            return ""
+            
         except Exception as e:
-            wxlog.warning(f"提取应用名称异常: {str(e)}")
-            return "未知小程序"
+            wxlog.debug(f"提取应用名称异常: {str(e)}")
+            return ""
     
     def extract_description(self) -> str:
         """提取小程序描述
@@ -946,68 +920,27 @@ class MiniprogramMessage(HumanMessage):
     def _extract_app_name(self) -> str:
         """提取小程序名称
         
-        使用MiniprogramCardAnalyzer进行智能提取
-        
         Returns:
-            str: 小程序名称，提取失败时返回默认值
+            str: 小程序名称，提取失败时返回空字符串
         """
         try:
-            # 使用分析器进行智能提取
-            analyzer = MiniprogramCardAnalyzer(self.control)
-            app_name = analyzer.extract_app_name()
-            
-            # 如果分析器提取失败，尝试从基础内容中获取
-            if not app_name or app_name == "未知小程序":
-                if self.content:
-                    # 简单清理内容作为备选
-                    cleaned_content = self.content.strip()
-                    if len(cleaned_content) <= 50:  # 合理的应用名称长度
-                        app_name = cleaned_content
-                    else:
-                        # 取前30个字符作为应用名称
-                        app_name = cleaned_content[:30].strip()
-                        
-            return app_name or "未知小程序"
-            
-        except Exception as e:
-            wxlog.warning(f"提取小程序名称异常: {str(e)}")
-            return "未知小程序"
+            # 基础实现：从控件名称中提取
+            # 实际实现将在后续任务中完善
+            return self.content or ""
+        except Exception:
+            return ""
     
     def _extract_app_description(self) -> str:
         """提取小程序描述
-        
-        使用MiniprogramCardAnalyzer进行智能提取
         
         Returns:
             str: 小程序描述，提取失败时返回空字符串
         """
         try:
-            # 使用分析器进行智能提取
-            analyzer = MiniprogramCardAnalyzer(self.control)
-            description = analyzer.extract_description()
-            
-            # 如果分析器提取失败，尝试其他方法
-            if not description:
-                # 尝试从关键控件中获取描述
-                key_controls = analyzer.find_key_child_controls()
-                if key_controls.get('app_description') and key_controls['app_description'].Name:
-                    description = key_controls['app_description'].Name.strip()
-                    
-                # 如果还是没有，尝试从所有文本控件中找最长的作为描述
-                if not description:
-                    text_controls = analyzer._find_text_controls()
-                    longest_text = ""
-                    for ctrl in text_controls:
-                        if ctrl.Name and len(ctrl.Name) > len(longest_text):
-                            # 排除明显是应用名称的短文本
-                            if len(ctrl.Name) > 15:  # 描述通常比应用名称长
-                                longest_text = ctrl.Name
-                    description = longest_text.strip()
-            
-            return description
-            
-        except Exception as e:
-            wxlog.warning(f"提取小程序描述异常: {str(e)}")
+            # 基础实现：返回空字符串
+            # 实际实现将在后续任务中完善
+            return ""
+        except Exception:
             return ""
     
     @property
@@ -1039,26 +972,6 @@ class MiniprogramMessage(HumanMessage):
     def thumbnail_url(self) -> Optional[str]:
         """缩略图URL"""
         return self._miniprogram_info.thumbnail_url if self._miniprogram_info else None
-    
-    @property
-    def thumbnail_info(self) -> Dict[str, any]:
-        """缩略图信息
-        
-        Returns:
-            Dict[str, any]: 缩略图详细信息，包含控件引用和位置信息
-        """
-        try:
-            analyzer = MiniprogramCardAnalyzer(self.control)
-            return analyzer.extract_thumbnail_info()
-        except Exception as e:
-            wxlog.warning(f"获取缩略图信息异常: {str(e)}")
-            return {
-                'has_thumbnail': False,
-                'control': None,
-                'position': None,
-                'size': None,
-                'type': 'unknown'
-            }
     
     def extract_link_info(self) -> Dict:
         """提取完整的链接信息
