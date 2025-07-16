@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "name": "Auto Git Commit on Upload",
-  "description": "Automatically performs a git commit when the user mentions uploading files or changes",
+  "description": "Automatically performs a git commit when the user mentions uploading files or changes， 需要按照每次的提交，编写commit message",
   "version": "1",
   "when": {
     "type": "fileEdited",
