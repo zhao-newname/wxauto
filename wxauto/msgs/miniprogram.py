@@ -942,6 +942,672 @@ class MiniprogramMessage(HumanMessage):
         
         # 从控件中提取小程序描述（基础实现）
         self._miniprogram_info.app_description = self._extract_app_description()
+        
+        # 提取技术参数（AppID、页面路径等）
+        self._extract_technical_params()
+    
+    def _extract_technical_params(self):
+        """提取小程序技术参数
+        
+        包括AppID、页面路径和额外参数的提取
+        """
+        try:
+            # 提取AppID
+            self._miniprogram_info.app_id = self._extract_app_id()
+            
+            # 提取页面路径
+            self._miniprogram_info.page_path = self._extract_page_path()
+            
+            # 提取额外参数
+            self._miniprogram_info.page_params = self._extract_page_params()
+            
+            wxlog.debug(f"技术参数提取完成 - AppID: {self._miniprogram_info.app_id}, "
+                       f"页面路径: {self._miniprogram_info.page_path}, "
+                       f"参数数量: {len(self._miniprogram_info.page_params)}")
+                       
+        except Exception as e:
+            wxlog.warning(f"提取技术参数异常: {str(e)}")
+    
+    def _extract_app_id(self) -> Optional[str]:
+        """提取小程序AppID
+        
+        通过多种方式尝试获取小程序的AppID：
+        1. 从UI控件属性中获取
+        2. 通过右键菜单复制功能获取
+        3. 从控件名称中解析
+        
+        Returns:
+            Optional[str]: 小程序AppID，获取失败时返回None
+        """
+        try:
+            # 策略1: 从控件属性中获取
+            app_id = self._extract_app_id_from_control_attributes()
+            if app_id:
+                wxlog.debug(f"从控件属性获取到AppID: {app_id}")
+                return app_id
+            
+            # 策略2: 通过右键菜单获取
+            app_id = self._extract_app_id_from_context_menu()
+            if app_id:
+                wxlog.debug(f"从右键菜单获取到AppID: {app_id}")
+                return app_id
+            
+            # 策略3: 从控件名称中解析
+            app_id = self._extract_app_id_from_control_name()
+            if app_id:
+                wxlog.debug(f"从控件名称解析到AppID: {app_id}")
+                return app_id
+            
+            wxlog.debug("无法获取AppID")
+            return None
+            
+        except Exception as e:
+            wxlog.warning(f"提取AppID异常: {str(e)}")
+            return None
+    
+    def _extract_app_id_from_control_attributes(self) -> Optional[str]:
+        """从控件属性中提取AppID
+        
+        Returns:
+            Optional[str]: AppID或None
+        """
+        try:
+            # 检查控件的各种属性
+            attributes_to_check = [
+                'AutomationId',
+                'ClassName', 
+                'Name',
+                'HelpText',
+                'AcceleratorKey'
+            ]
+            
+            for attr_name in attributes_to_check:
+                try:
+                    attr_value = getattr(self.control, attr_name, None)
+                    if attr_value and isinstance(attr_value, str):
+                        # 查找AppID模式 (通常是wx开头的字符串)
+                        app_id = self._parse_app_id_from_text(attr_value)
+                        if app_id:
+                            return app_id
+                except Exception:
+                    continue
+            
+            # 检查子控件的属性
+            for child in uia.WalkControl(self.control):
+                if child != self.control:
+                    for attr_name in attributes_to_check:
+                        try:
+                            attr_value = getattr(child, attr_name, None)
+                            if attr_value and isinstance(attr_value, str):
+                                app_id = self._parse_app_id_from_text(attr_value)
+                                if app_id:
+                                    return app_id
+                        except Exception:
+                            continue
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"从控件属性提取AppID异常: {str(e)}")
+            return None
+    
+    def _extract_app_id_from_context_menu(self) -> Optional[str]:
+        """通过右键菜单获取AppID
+        
+        Returns:
+            Optional[str]: AppID或None
+        """
+        try:
+            # 导入剪贴板操作模块
+            import pyperclip
+            
+            # 保存当前剪贴板内容
+            original_clipboard = ""
+            try:
+                original_clipboard = pyperclip.paste()
+            except Exception:
+                pass
+            
+            # 尝试右键复制小程序信息
+            try:
+                # 滚动到视图中
+                self.roll_into_view()
+                
+                # 右键点击
+                self.control.RightClick()
+                
+                # 等待右键菜单出现
+                import time
+                time.sleep(0.5)
+                
+                # 查找复制相关的菜单项
+                copy_menu_items = [
+                    "复制链接",
+                    "复制小程序信息", 
+                    "复制",
+                    "Copy Link",
+                    "Copy"
+                ]
+                
+                for menu_text in copy_menu_items:
+                    try:
+                        # 查找菜单项
+                        menu_item = uia.MenuItemControl(searchDepth=3, Name=menu_text)
+                        if menu_item.Exists(1):
+                            menu_item.Click()
+                            time.sleep(0.5)
+                            
+                            # 获取剪贴板内容
+                            clipboard_content = pyperclip.paste()
+                            if clipboard_content and clipboard_content != original_clipboard:
+                                # 从剪贴板内容中解析AppID
+                                app_id = self._parse_app_id_from_text(clipboard_content)
+                                if app_id:
+                                    return app_id
+                            break
+                    except Exception:
+                        continue
+                
+                # 按ESC键关闭菜单
+                import win32api
+                import win32con
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, 0, 0)
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, win32con.KEYEVENTF_KEYUP, 0)
+                
+            finally:
+                # 恢复原始剪贴板内容
+                try:
+                    if original_clipboard:
+                        pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"通过右键菜单提取AppID异常: {str(e)}")
+            return None
+    
+    def _extract_app_id_from_control_name(self) -> Optional[str]:
+        """从控件名称中解析AppID
+        
+        Returns:
+            Optional[str]: AppID或None
+        """
+        try:
+            # 检查主控件名称
+            if self.control.Name:
+                app_id = self._parse_app_id_from_text(self.control.Name)
+                if app_id:
+                    return app_id
+            
+            # 检查所有子控件的名称
+            for child in uia.WalkControl(self.control):
+                if child != self.control and child.Name:
+                    app_id = self._parse_app_id_from_text(child.Name)
+                    if app_id:
+                        return app_id
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"从控件名称解析AppID异常: {str(e)}")
+            return None
+    
+    def _parse_app_id_from_text(self, text: str) -> Optional[str]:
+        """从文本中解析AppID
+        
+        Args:
+            text: 待解析的文本
+            
+        Returns:
+            Optional[str]: 解析出的AppID或None
+        """
+        if not text:
+            return None
+        
+        # AppID的常见模式
+        app_id_patterns = [
+            r'wx[a-f0-9]{16}',  # 标准微信AppID格式
+            r'appid[=:]?\s*([a-zA-Z0-9]{16,32})',  # appid=xxx格式
+            r'app_id[=:]?\s*([a-zA-Z0-9]{16,32})',  # app_id=xxx格式
+            r'id[=:]?\s*(wx[a-f0-9]{16})',  # id=wxxx格式
+        ]
+        
+        for pattern in app_id_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                # 返回第一个匹配的AppID
+                app_id = matches[0] if isinstance(matches[0], str) else matches[0][0]
+                # 验证AppID格式
+                if self._is_valid_app_id(app_id):
+                    return app_id
+        
+        return None
+    
+    def _is_valid_app_id(self, app_id: str) -> bool:
+        """验证AppID格式是否有效
+        
+        Args:
+            app_id: 待验证的AppID
+            
+        Returns:
+            bool: 是否为有效的AppID格式
+        """
+        if not app_id or len(app_id) < 16:
+            return False
+        
+        # 微信小程序AppID通常以wx开头，后跟16位十六进制字符
+        if re.match(r'^wx[a-f0-9]{16}$', app_id, re.IGNORECASE):
+            return True
+        
+        # 其他可能的AppID格式（16-32位字母数字组合）
+        if re.match(r'^[a-zA-Z0-9]{16,32}$', app_id):
+            return True
+        
+        return False
+    
+    def _extract_page_path(self) -> Optional[str]:
+        """提取页面路径参数
+        
+        Returns:
+            Optional[str]: 页面路径或None
+        """
+        try:
+            # 策略1: 从控件属性中获取
+            page_path = self._extract_page_path_from_attributes()
+            if page_path:
+                wxlog.debug(f"从控件属性获取到页面路径: {page_path}")
+                return page_path
+            
+            # 策略2: 从右键菜单复制的内容中获取
+            page_path = self._extract_page_path_from_context_menu()
+            if page_path:
+                wxlog.debug(f"从右键菜单获取到页面路径: {page_path}")
+                return page_path
+            
+            # 策略3: 从控件名称中解析
+            page_path = self._extract_page_path_from_control_name()
+            if page_path:
+                wxlog.debug(f"从控件名称解析到页面路径: {page_path}")
+                return page_path
+            
+            wxlog.debug("无法获取页面路径")
+            return None
+            
+        except Exception as e:
+            wxlog.warning(f"提取页面路径异常: {str(e)}")
+            return None
+    
+    def _extract_page_path_from_attributes(self) -> Optional[str]:
+        """从控件属性中提取页面路径
+        
+        Returns:
+            Optional[str]: 页面路径或None
+        """
+        try:
+            # 检查控件和子控件的属性
+            for control in uia.WalkControl(self.control):
+                attributes_to_check = ['Name', 'HelpText', 'AutomationId']
+                
+                for attr_name in attributes_to_check:
+                    try:
+                        attr_value = getattr(control, attr_name, None)
+                        if attr_value and isinstance(attr_value, str):
+                            page_path = self._parse_page_path_from_text(attr_value)
+                            if page_path:
+                                return page_path
+                    except Exception:
+                        continue
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"从控件属性提取页面路径异常: {str(e)}")
+            return None
+    
+    def _extract_page_path_from_context_menu(self) -> Optional[str]:
+        """通过右键菜单获取页面路径
+        
+        Returns:
+            Optional[str]: 页面路径或None
+        """
+        try:
+            # 这里复用AppID提取中的右键菜单逻辑
+            # 实际实现中可以优化为共享方法
+            import pyperclip
+            
+            original_clipboard = ""
+            try:
+                original_clipboard = pyperclip.paste()
+            except Exception:
+                pass
+            
+            try:
+                self.roll_into_view()
+                self.control.RightClick()
+                
+                import time
+                time.sleep(0.5)
+                
+                copy_menu_items = ["复制链接", "复制小程序信息", "复制"]
+                
+                for menu_text in copy_menu_items:
+                    try:
+                        menu_item = uia.MenuItemControl(searchDepth=3, Name=menu_text)
+                        if menu_item.Exists(1):
+                            menu_item.Click()
+                            time.sleep(0.5)
+                            
+                            clipboard_content = pyperclip.paste()
+                            if clipboard_content and clipboard_content != original_clipboard:
+                                page_path = self._parse_page_path_from_text(clipboard_content)
+                                if page_path:
+                                    return page_path
+                            break
+                    except Exception:
+                        continue
+                
+                # 关闭菜单
+                import win32api, win32con
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, 0, 0)
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, win32con.KEYEVENTF_KEYUP, 0)
+                
+            finally:
+                try:
+                    if original_clipboard:
+                        pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"通过右键菜单提取页面路径异常: {str(e)}")
+            return None
+    
+    def _extract_page_path_from_control_name(self) -> Optional[str]:
+        """从控件名称中解析页面路径
+        
+        Returns:
+            Optional[str]: 页面路径或None
+        """
+        try:
+            # 检查所有控件的名称
+            for control in uia.WalkControl(self.control):
+                if control.Name:
+                    page_path = self._parse_page_path_from_text(control.Name)
+                    if page_path:
+                        return page_path
+            
+            return None
+            
+        except Exception as e:
+            wxlog.debug(f"从控件名称解析页面路径异常: {str(e)}")
+            return None
+    
+    def _parse_page_path_from_text(self, text: str) -> Optional[str]:
+        """从文本中解析页面路径
+        
+        Args:
+            text: 待解析的文本
+            
+        Returns:
+            Optional[str]: 解析出的页面路径或None
+        """
+        if not text:
+            return None
+        
+        # 页面路径的常见模式
+        page_path_patterns = [
+            r'path[=:]?\s*([/\w\-\.]+)',  # path=/pages/index
+            r'page[=:]?\s*([/\w\-\.]+)',  # page=/pages/index
+            r'(/pages/[/\w\-\.]*)',  # /pages/xxx格式
+            r'(/[a-zA-Z][/\w\-\.]*)',  # 以/开头的路径
+        ]
+        
+        for pattern in page_path_patterns:
+            matches = re.findall(pattern, text, re.IGNORECASE)
+            if matches:
+                page_path = matches[0]
+                # 验证页面路径格式
+                if self._is_valid_page_path(page_path):
+                    return page_path
+        
+        return None
+    
+    def _is_valid_page_path(self, page_path: str) -> bool:
+        """验证页面路径格式是否有效
+        
+        Args:
+            page_path: 待验证的页面路径
+            
+        Returns:
+            bool: 是否为有效的页面路径格式
+        """
+        if not page_path:
+            return False
+        
+        # 页面路径通常以/开头
+        if not page_path.startswith('/'):
+            return False
+        
+        # 长度合理
+        if len(page_path) > 200:
+            return False
+        
+        # 包含合理的字符
+        if re.match(r'^/[a-zA-Z0-9/\-_\.]*$', page_path):
+            return True
+        
+        return False
+    
+    def _extract_page_params(self) -> Dict:
+        """提取额外的页面参数
+        
+        Returns:
+            Dict: 页面参数字典
+        """
+        try:
+            params = {}
+            
+            # 策略1: 从控件属性中提取参数
+            params.update(self._extract_params_from_attributes())
+            
+            # 策略2: 从右键菜单复制的内容中提取参数
+            params.update(self._extract_params_from_context_menu())
+            
+            # 策略3: 从控件名称中解析参数
+            params.update(self._extract_params_from_control_name())
+            
+            wxlog.debug(f"提取到 {len(params)} 个页面参数")
+            return params
+            
+        except Exception as e:
+            wxlog.warning(f"提取页面参数异常: {str(e)}")
+            return {}
+    
+    def _extract_params_from_attributes(self) -> Dict:
+        """从控件属性中提取参数
+        
+        Returns:
+            Dict: 参数字典
+        """
+        params = {}
+        try:
+            for control in uia.WalkControl(self.control):
+                attributes_to_check = ['Name', 'HelpText', 'AutomationId']
+                
+                for attr_name in attributes_to_check:
+                    try:
+                        attr_value = getattr(control, attr_name, None)
+                        if attr_value and isinstance(attr_value, str):
+                            extracted_params = self._parse_params_from_text(attr_value)
+                            params.update(extracted_params)
+                    except Exception:
+                        continue
+            
+            return params
+            
+        except Exception as e:
+            wxlog.debug(f"从控件属性提取参数异常: {str(e)}")
+            return {}
+    
+    def _extract_params_from_context_menu(self) -> Dict:
+        """通过右键菜单获取参数
+        
+        Returns:
+            Dict: 参数字典
+        """
+        try:
+            # 复用右键菜单逻辑
+            import pyperclip
+            
+            original_clipboard = ""
+            try:
+                original_clipboard = pyperclip.paste()
+            except Exception:
+                pass
+            
+            try:
+                self.roll_into_view()
+                self.control.RightClick()
+                
+                import time
+                time.sleep(0.5)
+                
+                copy_menu_items = ["复制链接", "复制小程序信息", "复制"]
+                
+                for menu_text in copy_menu_items:
+                    try:
+                        menu_item = uia.MenuItemControl(searchDepth=3, Name=menu_text)
+                        if menu_item.Exists(1):
+                            menu_item.Click()
+                            time.sleep(0.5)
+                            
+                            clipboard_content = pyperclip.paste()
+                            if clipboard_content and clipboard_content != original_clipboard:
+                                params = self._parse_params_from_text(clipboard_content)
+                                if params:
+                                    return params
+                            break
+                    except Exception:
+                        continue
+                
+                # 关闭菜单
+                import win32api, win32con
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, 0, 0)
+                win32api.keybd_event(win32con.VK_ESCAPE, 0, win32con.KEYEVENTF_KEYUP, 0)
+                
+            finally:
+                try:
+                    if original_clipboard:
+                        pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
+            
+            return {}
+            
+        except Exception as e:
+            wxlog.debug(f"通过右键菜单提取参数异常: {str(e)}")
+            return {}
+    
+    def _extract_params_from_control_name(self) -> Dict:
+        """从控件名称中解析参数
+        
+        Returns:
+            Dict: 参数字典
+        """
+        params = {}
+        try:
+            for control in uia.WalkControl(self.control):
+                if control.Name:
+                    extracted_params = self._parse_params_from_text(control.Name)
+                    params.update(extracted_params)
+            
+            return params
+            
+        except Exception as e:
+            wxlog.debug(f"从控件名称解析参数异常: {str(e)}")
+            return {}
+    
+    def _parse_params_from_text(self, text: str) -> Dict:
+        """从文本中解析参数
+        
+        Args:
+            text: 待解析的文本
+            
+        Returns:
+            Dict: 解析出的参数字典
+        """
+        params = {}
+        if not text:
+            return params
+        
+        try:
+            # URL参数模式 (?key=value&key2=value2)
+            url_params_pattern = r'[?&]([a-zA-Z_][a-zA-Z0-9_]*)[=:]([^&\s]+)'
+            matches = re.findall(url_params_pattern, text)
+            for key, value in matches:
+                params[key] = value
+            
+            # JSON格式参数
+            json_pattern = r'\{[^}]*\}'
+            json_matches = re.findall(json_pattern, text)
+            for json_str in json_matches:
+                try:
+                    json_params = json.loads(json_str)
+                    if isinstance(json_params, dict):
+                        params.update(json_params)
+                except Exception:
+                    continue
+            
+            # 键值对格式 (key=value, key:value)
+            kv_patterns = [
+                r'([a-zA-Z_][a-zA-Z0-9_]*)[=:]([^,\s&]+)',
+                r'([a-zA-Z_][a-zA-Z0-9_]*)\s*[:=]\s*([^,\n&]+)'
+            ]
+            
+            for pattern in kv_patterns:
+                matches = re.findall(pattern, text)
+                for key, value in matches:
+                    # 过滤掉明显不是参数的键值对
+                    if not self._is_likely_param_key(key):
+                        continue
+                    params[key] = value.strip()
+            
+            return params
+            
+        except Exception as e:
+            wxlog.debug(f"解析参数异常: {str(e)}")
+            return {}
+    
+    def _is_likely_param_key(self, key: str) -> bool:
+        """判断是否可能是参数键名
+        
+        Args:
+            key: 键名
+            
+        Returns:
+            bool: 是否可能是参数键名
+        """
+        if not key or len(key) < 2:
+            return False
+        
+        # 排除明显不是参数的键名
+        exclude_keys = [
+            'width', 'height', 'left', 'top', 'right', 'bottom',
+            'color', 'font', 'size', 'style', 'class', 'id'
+        ]
+        
+        if key.lower() in exclude_keys:
+            return False
+        
+        # 参数键名通常是字母开头的标识符
+        if re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', key):
+            return True
+        
+        return False
     
     def _extract_app_name(self) -> str:
         """提取小程序名称
