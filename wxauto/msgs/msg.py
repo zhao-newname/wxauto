@@ -16,6 +16,7 @@ class MESSAGE_ATTRS:
     CHAT_TEXT_HEIGHT = 52
     FILE_MSG_HEIGHT = 115
     VOICE_MSG_HEIGHT = 55
+    MINIPROGRAM_MSG_HEIGHT = 120
 
     TEXT_MSG_CONTROL_NUM = (8, 9, 10, 11)
     TIME_MSG_CONTROL_NUM = (1,)
@@ -25,6 +26,7 @@ class MESSAGE_ATTRS:
     VOICE_MSG_CONTROL_NUM = tuple(i for i in range(10, 30))
     VIDEO_MSG_CONTROL_NUM = (13, 14, 15, 16)
     QUOTE_MSG_CONTROL_NUM = tuple(i for i in range(16, 30))
+    MINIPROGRAM_MSG_CONTROL_NUM = tuple(i for i in range(12, 25))
 
 def _lang(text: str) -> str:
     return MESSAGES.get(text, {WxParam.LANGUAGE: text}).get(WxParam.LANGUAGE)
@@ -36,6 +38,7 @@ SEPICIAL_MSGS = [
         '[视频]',     # VideoMessage
         '[语音]',     # VoiceMessage
         '[文件]',     # FileMessage
+        '[小程序]',   # MiniprogramMessage
     ]
 ]
 
@@ -119,6 +122,10 @@ def parse_msg_type(
         # FileMessage
         elif content == _lang('[文件]') and length in MESSAGE_ATTRS.FILE_MSG_CONTROL_NUM:
             return getattr(msgtype, f'{attr}FileMessage')(control, parent)
+        
+        # MiniprogramMessage
+        elif content == _lang('[小程序]') and length in MESSAGE_ATTRS.MINIPROGRAM_MSG_CONTROL_NUM:
+            return getattr(msgtype, f'{attr}MiniprogramMessage')(control, parent)
     
     # TextMessage
     if length in MESSAGE_ATTRS.TEXT_MSG_CONTROL_NUM:
