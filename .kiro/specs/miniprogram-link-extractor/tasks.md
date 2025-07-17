@@ -83,7 +83,7 @@
     - 边界测试：测试无技术参数的小程序卡片，验证返回None
     - 参数解析测试：验证page_params字典正确存储额外参数
 
-- [ ] 6. 创建好友和自己的小程序消息类
+- [x] 6. 创建好友和自己的小程序消息类
   - 在wxauto/msgs/friend.py中添加FriendMiniprogramMessage类
   - 在wxauto/msgs/self.py中添加SelfMiniprogramMessage类
   - 实现两种消息类型的特定属性和方法
