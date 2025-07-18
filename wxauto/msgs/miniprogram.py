@@ -77,8 +77,8 @@ class MiniprogramCardAnalyzer:
         'ecommerce': {'min_controls': 8, 'max_controls': 25, 'keywords': ["购物", "商城", "价格", "¥", "元", "买", "商品", "优惠"]}
     }
     
-    # 小程序卡片高度特征 (像素)
-    CARD_HEIGHT_RANGE = (70, 220)
+    # 小程序卡片高度特征 (像素) - 扩大范围以适应不同类型的小程序卡片
+    CARD_HEIGHT_RANGE = (60, 350)
     
     # 小程序卡片宽度特征 (像素)
     CARD_WIDTH_RANGE = (200, 600)
@@ -156,8 +156,8 @@ class MiniprogramCardAnalyzer:
                 score = max(0, score - 30)  # 大幅降低分数
                 wxlog.debug("触发排除规则 -30分")
             
-            # 判断阈值：70分以上认为是小程序卡片
-            is_miniprogram = score >= 70
+            # 判断阈值：50分以上认为是小程序卡片 (降低阈值以提高识别率)
+            is_miniprogram = score >= 50
             
             if is_miniprogram:
                 wxlog.debug(f"识别为小程序卡片，总分: {score}/{max_score}")
@@ -937,14 +937,40 @@ class MiniprogramMessage(HumanMessage):
         self._miniprogram_info.sender = self.sender_remark or self.sender
         self._miniprogram_info.share_time = datetime.now()
         
-        # 从控件中提取小程序名称（基础实现）
+        # 从控件中提取小程序名称
         self._miniprogram_info.app_name = self._extract_app_name()
         
-        # 从控件中提取小程序描述（基础实现）
+        # 从控件中提取小程序描述
         self._miniprogram_info.app_description = self._extract_app_description()
         
         # 提取技术参数（AppID、页面路径等）
         self._extract_technical_params()
+    
+    def _extract_app_name(self) -> str:
+        """提取小程序名称
+        
+        Returns:
+            str: 小程序名称
+        """
+        try:
+            analyzer = MiniprogramCardAnalyzer(self.control)
+            return analyzer.extract_app_name()
+        except Exception as e:
+            wxlog.warning(f"提取小程序名称异常: {str(e)}")
+            return "未知小程序"
+    
+    def _extract_app_description(self) -> str:
+        """提取小程序描述
+        
+        Returns:
+            str: 小程序描述
+        """
+        try:
+            analyzer = MiniprogramCardAnalyzer(self.control)
+            return analyzer.extract_description()
+        except Exception as e:
+            wxlog.warning(f"提取小程序描述异常: {str(e)}")
+            return ""
     
     def _extract_technical_params(self):
         """提取小程序技术参数
@@ -1745,32 +1771,159 @@ class MiniprogramMessage(HumanMessage):
             WxResponse: 操作结果
         """
         try:
-            # 滚动到视图中
-            if not self.roll_into_view():
+            # 滚动到视图中确保卡片可见
+            roll_result = self.roll_into_view()
+            if not roll_result.is_success():
+                wxlog.warning("无法滚动到小程序卡片")
                 return WxResponse.failure("无法滚动到小程序卡片")
             
-            # 点击小程序卡片
-            self.click()
+            # 确保控件存在且可点击
+            if not self.control.Exists(1):
+                return WxResponse.failure("小程序卡片控件不存在")
+            
+            # 查找可点击的区域
+            analyzer = MiniprogramCardAnalyzer(self.control)
+            key_controls = analyzer.find_key_child_controls()
+            
+            # 优先点击可点击区域，否则点击整个卡片
+            clickable_control = key_controls.get('clickable_area') or self.control
+            
+            # 执行点击操作
+            clickable_control.Click()
+            
+            # 等待小程序打开
+            import time
+            time.sleep(1.0)
+            
+            wxlog.info(f"成功点击小程序卡片: {self.app_name}")
             return WxResponse.success("成功打开小程序")
             
         except Exception as e:
+            wxlog.error(f"打开小程序失败: {str(e)}")
             return WxResponse.failure(f"打开小程序失败: {str(e)}")
     
     def copy_link_info(self) -> WxResponse:
         """复制链接信息到剪贴板
         
-        通过右键菜单复制小程序信息
+        通过右键菜单复制小程序信息到剪贴板
         
         Returns:
-            WxResponse: 操作结果
+            WxResponse: 操作结果，包含复制的信息
         """
         try:
-            # 基础实现：使用右键菜单
-            # 实际实现将在后续任务中完善
-            return self.select_option("复制")
+            import pyperclip
             
+            # 保存当前剪贴板内容
+            original_clipboard = ""
+            try:
+                original_clipboard = pyperclip.paste()
+            except Exception:
+                pass
+            
+            # 滚动到视图中
+            roll_result = self.roll_into_view()
+            if not roll_result.is_success():
+                return WxResponse.failure("无法滚动到小程序卡片")
+            
+            # 确保控件存在
+            if not self.control.Exists(1):
+                return WxResponse.failure("小程序卡片控件不存在")
+            
+            # 尝试多种复制方式
+            copy_success = False
+            copied_content = ""
+            
+            # 方式1: 尝试右键菜单复制
+            try:
+                # 右键点击
+                self.right_click()
+                
+                # 等待右键菜单出现
+                import time
+                time.sleep(0.5)
+                
+                # 尝试多种复制选项
+                copy_options = [
+                    "复制链接",
+                    "复制小程序信息", 
+                    "复制",
+                    "Copy Link",
+                    "Copy"
+                ]
+                
+                for option in copy_options:
+                    try:
+                        menu_item = uia.MenuItemControl(searchDepth=3, Name=option)
+                        if menu_item.Exists(1):
+                            menu_item.Click()
+                            time.sleep(0.5)
+                            
+                            # 检查剪贴板内容
+                            new_clipboard = pyperclip.paste()
+                            if new_clipboard and new_clipboard != original_clipboard:
+                                copied_content = new_clipboard
+                                copy_success = True
+                                wxlog.debug(f"通过右键菜单复制成功: {option}")
+                                break
+                    except Exception as e:
+                        wxlog.debug(f"尝试复制选项 {option} 失败: {str(e)}")
+                        continue
+                
+                # 关闭右键菜单
+                try:
+                    import win32api, win32con
+                    win32api.keybd_event(win32con.VK_ESCAPE, 0, 0, 0)
+                    win32api.keybd_event(win32con.VK_ESCAPE, 0, win32con.KEYEVENTF_KEYUP, 0)
+                except Exception:
+                    pass
+                    
+            except Exception as e:
+                wxlog.debug(f"右键菜单复制失败: {str(e)}")
+            
+            # 方式2: 如果右键菜单复制失败，使用小程序信息构造复制内容
+            if not copy_success:
+                try:
+                    miniprogram_info = self.extract_link_info()
+                    
+                    # 构造复制内容
+                    copy_lines = []
+                    if miniprogram_info.get('app_name'):
+                        copy_lines.append(f"小程序名称: {miniprogram_info['app_name']}")
+                    if miniprogram_info.get('app_description'):
+                        copy_lines.append(f"描述: {miniprogram_info['app_description']}")
+                    if miniprogram_info.get('app_id'):
+                        copy_lines.append(f"AppID: {miniprogram_info['app_id']}")
+                    if miniprogram_info.get('page_path'):
+                        copy_lines.append(f"页面路径: {miniprogram_info['page_path']}")
+                    if miniprogram_info.get('sender'):
+                        copy_lines.append(f"分享者: {miniprogram_info['sender']}")
+                    
+                    if copy_lines:
+                        copied_content = '\n'.join(copy_lines)
+                        pyperclip.copy(copied_content)
+                        copy_success = True
+                        wxlog.debug("使用小程序信息构造复制内容成功")
+                    
+                except Exception as e:
+                    wxlog.debug(f"构造复制内容失败: {str(e)}")
+            
+            if copy_success:
+                wxlog.info(f"成功复制小程序信息: {self.app_name}")
+                return WxResponse.success("成功复制小程序信息", data={"copied_content": copied_content})
+            else:
+                return WxResponse.failure("无法复制小程序信息")
+                
         except Exception as e:
+            wxlog.error(f"复制链接信息失败: {str(e)}")
             return WxResponse.failure(f"复制链接信息失败: {str(e)}")
+        
+        finally:
+            # 如果没有成功复制，恢复原始剪贴板内容
+            if not copy_success and original_clipboard:
+                try:
+                    pyperclip.copy(original_clipboard)
+                except Exception:
+                    pass
     
     @property
     def miniprogram_info(self) -> MiniprogramInfo:
@@ -1780,3 +1933,72 @@ class MiniprogramMessage(HumanMessage):
             MiniprogramInfo: 小程序信息数据模型实例
         """
         return self._miniprogram_info or MiniprogramInfo()
+    
+    @property
+    def app_name(self) -> str:
+        """获取小程序名称
+        
+        Returns:
+            str: 小程序名称
+        """
+        return self._miniprogram_info.app_name if self._miniprogram_info else ""
+    
+    @property
+    def app_description(self) -> str:
+        """获取小程序描述
+        
+        Returns:
+            str: 小程序描述
+        """
+        return self._miniprogram_info.app_description if self._miniprogram_info else ""
+    
+    @property
+    def app_id(self) -> Optional[str]:
+        """获取小程序AppID
+        
+        Returns:
+            Optional[str]: 小程序AppID
+        """
+        return self._miniprogram_info.app_id if self._miniprogram_info else None
+    
+    @property
+    def page_path(self) -> Optional[str]:
+        """获取页面路径
+        
+        Returns:
+            Optional[str]: 页面路径
+        """
+        return self._miniprogram_info.page_path if self._miniprogram_info else None
+    
+    @property
+    def page_params(self) -> Dict:
+        """获取页面参数
+        
+        Returns:
+            Dict: 页面参数字典
+        """
+        return self._miniprogram_info.page_params if self._miniprogram_info else {}
+    
+    @property
+    def thumbnail_url(self) -> Optional[str]:
+        """获取缩略图URL
+        
+        Returns:
+            Optional[str]: 缩略图URL
+        """
+        return self._miniprogram_info.thumbnail_url if self._miniprogram_info else None
+    
+    @property
+    def _xbias(self):
+        """获取消息点击的X偏移量
+        
+        Returns:
+            int: X偏移量
+        """
+        from wxauto.param import WxParam
+        if WxParam.FORCE_MESSAGE_XBIAS:
+            try:
+                return int(self.head_control.BoundingRectangle.width() * 1.5)
+            except Exception:
+                return WxParam.DEFAULT_MESSAGE_XBIAS
+        return WxParam.DEFAULT_MESSAGE_XBIAS
