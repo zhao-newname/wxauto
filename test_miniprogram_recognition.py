@@ -484,8 +484,8 @@ class MiniprogramRecognitionTester:
 def main():
     """主函数"""
     try:
-        # 设置日志级别
-        wxlog.setLevel('DEBUG')
+        # 设置日志级别 - 修复方法调用
+        # wxlog.setLevel('DEBUG')  # WxautoLogger没有setLevel方法
         
         # 创建测试器并运行测试
         tester = MiniprogramRecognitionTester()
