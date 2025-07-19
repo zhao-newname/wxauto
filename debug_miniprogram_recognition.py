@@ -1,121 +1,109 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
-调试小程序识别功能
+小程序识别和点击调试脚本
+专门用于调试小程序卡片的识别和点击功能
 """
 
 import sys
 import os
 import time
 
-# 添加项目路径
+# 添加项目根目录到Python路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from wxauto import WeChat
-from wxauto.msgs.msg import _is_miniprogram_message
-from wxauto.msgs.miniprogram import MiniprogramCardAnalyzer
-from wxauto.logger import wxlog
-
-def debug_miniprogram_recognition():
-    """调试小程序识别功能"""
-    print("🔍 开始调试小程序识别功能")
+def debug_miniprogram_click():
+    """调试小程序点击功能"""
+    print("🔧 小程序点击功能调试")
+    print("=" * 40)
     
     try:
+        from wxauto import WeChat
+        
         # 连接微信
-        wx = WeChat()
-        print("✅ 微信连接成功")
+        print("1. 连接微信...")
+        wx = WeChat(debug=True)
+        print(f"   ✅ 连接成功: {wx.nickname}")
         
-        # 切换到文件传输助手
-        wx.ChatWith("文件传输助手")
-        time.sleep(2)
+        # 获取小程序消息
+        print("2. 获取小程序消息...")
+        messages = wx.GetMiniprogramMessages()
+        print(f"   ✅ 找到 {len(messages)} 条小程序消息")
         
-        # 获取消息
-        messages = wx.GetAllMessage()
-        print(f"✅ 获取到 {len(messages)} 条消息")
+        if not messages:
+            print("   ⚠️  没有小程序消息可测试")
+            return
         
-        for i, msg in enumerate(messages, 1):
-            print(f"\n{'='*50}")
-            print(f"消息 {i}: {msg.type}")
-            print(f"内容: {msg.content[:100]}...")
+        # 选择第一条消息进行测试
+        msg = messages[0]
+        print(f"3. 测试消息: {msg.app_name}")
+        
+        # 获取控件位置信息
+        rect = msg.control.BoundingRectangle
+        if rect:
+            print(f"   控件位置: ({rect.left}, {rect.top}) - ({rect.right}, {rect.bottom})")
+            print(f"   控件大小: {rect.width()} x {rect.height()}")
             
-            if hasattr(msg, 'control') and msg.control:
-                print(f"控件存在: True")
+            # 计算中心点
+            center_x = rect.left + rect.width() // 2
+            center_y = rect.top + rect.height() // 2
+            print(f"   中心点: ({center_x}, {center_y})")
+        else:
+            print("   ❌ 无法获取控件位置")
+            return
+        
+        # 询问是否继续测试点击
+        print("\n4. 准备测试点击功能...")
+        print("   注意：这将会点击小程序卡片并尝试打开小程序")
+        
+        choice = input("   是否继续? (y/n): ").strip().lower()
+        if choice != 'y':
+            print("   测试取消")
+            return
+        
+        # 测试打开小程序
+        print("5. 测试打开小程序...")
+        result = msg.open_miniprogram()
+        
+        if result.success:
+            print("   ✅ 小程序打开成功")
+            
+            # 等待用户确认小程序是否真的打开了
+            time.sleep(2)
+            actual_opened = input("   小程序是否真的打开了? (y/n): ").strip().lower()
+            
+            if actual_opened == 'y':
+                print("   🎉 点击功能正常工作！")
                 
-                # 测试控件尺寸
-                if hasattr(msg.control, 'BoundingRectangle') and msg.control.BoundingRectangle:
-                    rect = msg.control.BoundingRectangle
-                    width = rect.right - rect.left
-                    height = rect.bottom - rect.top
-                    print(f"控件尺寸: {width}x{height}")
+                # 测试复制链接功能
+                print("6. 测试复制链接功能...")
+                copy_result = msg.copy_link_info()
                 
-                # 测试_is_miniprogram_message函数
-                print("🔍 测试 _is_miniprogram_message 函数:")
-                try:
-                    is_miniprogram = _is_miniprogram_message(msg.control)
-                    print(f"  结果: {is_miniprogram}")
-                    
-                    if is_miniprogram:
-                        print("  ✅ 识别为小程序消息!")
+                if copy_result.success:
+                    print("   ✅ 链接复制成功")
+                    # 安全访问data
+                    data = copy_result.get('data') if hasattr(copy_result, 'get') else getattr(copy_result, 'data', None)
+                    if data and data.get('copied_content'):
+                        content = data['copied_content']
+                        print(f"   📋 复制内容: {content}")
                     else:
-                        print("  ❌ 未识别为小程序消息")
-                        
-                        # 详细调试MiniprogramCardAnalyzer
-                        print("  🔍 详细调试 MiniprogramCardAnalyzer:")
-                        try:
-                            analyzer = MiniprogramCardAnalyzer(msg.control)
-                            
-                            # 测试尺寸检查
-                            size_ok = analyzer._check_size_features()
-                            print(f"    尺寸检查: {size_ok}")
-                            
-                            if size_ok:
-                                # 测试其他特征
-                                structure_ok = analyzer._check_structure_features()
-                                print(f"    结构特征: {structure_ok}")
-                                
-                                child_ok = analyzer._check_child_control_features()
-                                print(f"    子控件特征: {child_ok}")
-                                
-                                name_ok = analyzer._check_name_indicators()
-                                print(f"    名称特征: {name_ok}")
-                                
-                                layout_ok = analyzer._check_layout_features()
-                                print(f"    布局特征: {layout_ok}")
-                                
-                                # 手动计算分数
-                                score = 0
-                                if structure_ok: score += 40
-                                if child_ok: score += 30
-                                if name_ok: score += 20
-                                if layout_ok: score += 10
-                                
-                                print(f"    总分: {score}/100 (阈值: 70)")
-                                
-                                if score >= 70:
-                                    print("    ✅ 应该被识别为小程序")
-                                else:
-                                    print("    ❌ 分数不足，未达到识别阈值")
-                            else:
-                                print("    ❌ 尺寸检查失败，直接排除")
-                                
-                        except Exception as e:
-                            print(f"    ❌ MiniprogramCardAnalyzer 异常: {str(e)}")
-                            import traceback
-                            traceback.print_exc()
-                        
-                except Exception as e:
-                    print(f"  ❌ _is_miniprogram_message 异常: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
+                        print("   ℹ️  复制成功但无详细内容")
+                else:
+                    print(f"   ❌ 链接复制失败: {copy_result.get('message', '未知错误')}")
             else:
-                print("控件不存在或无效")
-                
+                print("   ❌ 小程序实际未打开，点击功能需要调试")
+        else:
+            print(f"   ❌ 小程序打开失败: {result.message}")
+        
     except Exception as e:
-        print(f"❌ 调试过程异常: {str(e)}")
+        print(f"❌ 调试失败: {str(e)}")
         import traceback
         traceback.print_exc()
 
+def main():
+    """主函数"""
+    debug_miniprogram_click()
+
 if __name__ == "__main__":
-    # 设置日志级别为DEBUG以获取更多信息
-    # wxlog.setLevel('DEBUG')  # WxautoLogger没有setLevel方法
-    debug_miniprogram_recognition()
+    main()

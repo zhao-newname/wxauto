@@ -8,12 +8,14 @@ from .param import (
     PROJECT_NAME
 )
 from .logger import wxlog
+from .utils.miniprogram_extractor import MiniprogramExtractor
 from typing import (
     Union, 
     List,
     Dict,
     Callable,
-    TYPE_CHECKING
+    TYPE_CHECKING,
+    Optional
 )
 from abc import ABC, abstractmethod
 import threading
@@ -23,6 +25,7 @@ import sys
 
 if TYPE_CHECKING:
     from wxauto.msgs.base import Message
+    from wxauto.msgs.miniprogram import MiniprogramMessage
     from wxauto.ui.sessionbox import SessionElement
 
 
@@ -165,6 +168,70 @@ class Chat:
     def Close(self) -> None:
         """关闭微信窗口"""
         self.core.close()
+    
+    def GetMiniprogramMessages(self, use_cache: bool = True) -> List['MiniprogramMessage']:
+        """获取当前聊天窗口的所有小程序消息
+        
+        Args:
+            use_cache (bool, optional): 是否使用缓存，默认True
+            
+        Returns:
+            List[MiniprogramMessage]: 小程序消息列表
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.extract_all_miniprogram_messages(use_cache)
+        except Exception as e:
+            wxlog.warning(f"获取小程序消息异常: {str(e)}")
+            return []
+    
+    def FilterMiniprogramByApp(self, app_name: str, exact_match: bool = False) -> List['MiniprogramMessage']:
+        """按小程序名称过滤消息
+        
+        Args:
+            app_name (str): 小程序名称
+            exact_match (bool, optional): 是否精确匹配，默认False（模糊匹配）
+            
+        Returns:
+            List[MiniprogramMessage]: 过滤后的小程序消息列表
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.filter_by_app_name(app_name, exact_match)
+        except Exception as e:
+            wxlog.warning(f"按应用名称过滤小程序消息异常: {str(e)}")
+            return []
+    
+    def GetMiniprogramStatistics(self) -> Dict[str, any]:
+        """获取小程序消息统计信息
+        
+        Returns:
+            Dict[str, any]: 统计信息字典，包含总数、热门应用、发送者等信息
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.get_statistics()
+        except Exception as e:
+            wxlog.warning(f"获取小程序统计信息异常: {str(e)}")
+            return {'total_count': 0, 'error': str(e)}
+    
+    def ExportMiniprogramMessages(self, filepath: str, include_statistics: bool = True) -> WxResponse:
+        """导出小程序消息为JSON文件
+        
+        Args:
+            filepath (str): 导出文件路径
+            include_statistics (bool, optional): 是否包含统计信息，默认True
+            
+        Returns:
+            WxResponse: 导出结果
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.export_to_json(filepath, include_statistics)
+        except Exception as e:
+            error_msg = f"导出小程序消息异常: {str(e)}"
+            wxlog.warning(error_msg)
+            return WxResponse.failure(error_msg)
 
 
 class WeChat(Chat, Listener):
@@ -342,3 +409,88 @@ class WeChat(Chat, Listener):
                 wxlog.debug(f'wxauto("{self.nickname}") shutdown')
                 self.StopListening(True)
                 break
+    
+    def GetAllMiniprogramMessages(self) -> List['MiniprogramMessage']:
+        """获取当前聊天窗口的所有小程序消息（WeChat类继承自Chat类的方法）
+        
+        Returns:
+            List[MiniprogramMessage]: 小程序消息列表
+        """
+        return self.GetMiniprogramMessages()
+    
+    def SearchMiniprogramByApp(self, app_name: str, exact_match: bool = False) -> List['MiniprogramMessage']:
+        """在当前聊天中搜索指定小程序的消息（WeChat类继承自Chat类的方法）
+        
+        Args:
+            app_name (str): 小程序名称
+            exact_match (bool, optional): 是否精确匹配，默认False（模糊匹配）
+            
+        Returns:
+            List[MiniprogramMessage]: 匹配的小程序消息列表
+        """
+        return self.FilterMiniprogramByApp(app_name, exact_match)
+    
+    def GetMiniprogramSummary(self) -> Dict[str, any]:
+        """获取小程序消息摘要信息（WeChat类继承自Chat类的方法）
+        
+        Returns:
+            Dict[str, any]: 摘要信息，包含统计数据和热门应用
+        """
+        return self.GetMiniprogramStatistics()
+    
+    def ExportCurrentChatMiniprogram(self, filepath: str) -> WxResponse:
+        """导出当前聊天的小程序消息（WeChat类继承自Chat类的方法）
+        
+        Args:
+            filepath (str): 导出文件路径
+            
+        Returns:
+            WxResponse: 导出结果
+        """
+        return self.ExportMiniprogramMessages(filepath)
+    
+    def GetRecentMiniprogramMessages(self, days: int = 7) -> List['MiniprogramMessage']:
+        """获取最近几天的小程序消息
+        
+        Args:
+            days (int, optional): 天数，默认7天
+            
+        Returns:
+            List[MiniprogramMessage]: 最近的小程序消息列表
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.get_recent_miniprogram_messages(days)
+        except Exception as e:
+            wxlog.warning(f"获取最近小程序消息异常: {str(e)}")
+            return []
+    
+    def FindDuplicateMiniprogram(self) -> Dict[str, List['MiniprogramMessage']]:
+        """查找重复的小程序应用
+        
+        Returns:
+            Dict[str, List[MiniprogramMessage]]: 重复应用的消息字典
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.find_duplicate_apps()
+        except Exception as e:
+            wxlog.warning(f"查找重复小程序异常: {str(e)}")
+            return {}
+    
+    def FilterMiniprogramBySender(self, sender: str, exact_match: bool = False) -> List['MiniprogramMessage']:
+        """按发送者过滤小程序消息
+        
+        Args:
+            sender (str): 发送者名称
+            exact_match (bool, optional): 是否精确匹配，默认False（模糊匹配）
+            
+        Returns:
+            List[MiniprogramMessage]: 过滤后的小程序消息列表
+        """
+        try:
+            extractor = MiniprogramExtractor(self)
+            return extractor.filter_by_sender(sender, exact_match)
+        except Exception as e:
+            wxlog.warning(f"按发送者过滤小程序消息异常: {str(e)}")
+            return []
